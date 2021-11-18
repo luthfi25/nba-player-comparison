@@ -65,16 +65,18 @@ def loadPlayerStats(firstName, lastName):
 
 def comparePlayer(player1, player2):
 	percentages = []
-	percentages.append(round((player2['ppg'] / player1['ppg'] * 100) - 100, 2))
-	percentages.append(round((player2['rpg'] / player1['rpg'] * 100) - 100, 2))
-	percentages.append(round((player2['apg'] / player1['apg'] * 100) - 100, 2))
-	percentages.append(round((player2['spg'] / player1['spg'] * 100) - 100, 2))
-	percentages.append(round((player2['bpg'] / player1['bpg'] * 100) - 100, 2))
-	percentages.append(round((player1['topg'] / player2['topg'] * 100) - 100, 2))
-	percentages.append(round((player2['fgp'] / player1['fgp'] * 100) - 100, 2))
-	percentages.append(round((player2['ftp'] / player1['ftp'] * 100) - 100, 2))
-	percentages.append(round((player2['3pm'] / player1['3pm'] * 100) - 100, 2))
+	percentages.append(round((player2['ppg'] / (player2['ppg'] + player1['ppg']) * 100) - 50, 2))
+	percentages.append(round((player2['rpg'] / (player2['rpg'] + player1['rpg']) * 100) - 50, 2))
+	percentages.append(round((player2['apg'] / (player2['apg'] + player1['apg']) * 100) - 50, 2))
+	percentages.append(round((player2['bpg'] / (player2['bpg'] + player1['bpg']) * 100) - 50, 2))
+	percentages.append(round((player2['spg'] / (player2['spg'] + player1['spg']) * 100) - 50, 2))
+	percentages.append(round((player2['fgp'] / (player2['fgp'] + player1['fgp']) * 100) - 50, 2))
+	percentages.append(round((player2['ftp'] / (player2['ftp'] + player1['ftp']) * 100) - 50, 2))
+	percentages.append(round((player1['topg'] / (player2['topg'] + player1['topg']) * 100) - 50, 2))
+	percentages.append(round((player2['3pm'] / (player2['3pm'] + player1['3pm']) * 100) - 50, 2))
+
 	average = round(sum(percentages[:9]) / 9, 2)
+	print(percentages)
 	betterCatCount = sum([1 for i in percentages if i > 0])
 
 	percentages.append(betterCatCount)
