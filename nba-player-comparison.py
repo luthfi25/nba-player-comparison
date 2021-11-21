@@ -4,62 +4,81 @@
 # TODO:
 # - Set year dynamically
 
-import urllib.request, json
+# import urllib.request, json
 from datetime import date
-import csv
 import xlsxwriter
+from nba_api.stats.static import players
+from nba_api.stats.endpoints import playergamelog
+import pandas as pd
+import math
 
 today = date.today()
 print("Collecting all player based on today's ({0}) data...".format(today))
 
-playerDataUrl = "https://data.nba.net/10s/prod/v1/2021/players.json"
-playerStatsUrl = "https://data.nba.net/data/10s/prod/v1/2021/players/{0}_profile.json"
-playerDataJSON = {}
+# playerDataUrl = "https://data.nba.net/10s/prod/v1/2021/players.json"
+# playerStatsUrl = "https://data.nba.net/data/10s/prod/v1/2021/players/{0}_profile.json"
+# playerDataJSON = {}
 
-with urllib.request.urlopen(playerDataUrl) as url:
-	playerDataJSON = json.loads(url.read().decode())
+# with urllib.request.urlopen(playerDataUrl) as url:
+# 	playerDataJSON = json.loads(url.read().decode())
 
 
-def loadPlayerStats(firstName, lastName):
+def loadPlayerStats(mainPlayerName):
 	print("Finding player data...")
-	playerStatsJSON = {}
-	playerID = -1
+	# playerStatsJSON = {}
+	# playerID = -1
 
-	for playerData in playerDataJSON['league']['standard']:
-		if(playerData['firstName'].lower() == firstName and playerData['lastName'].lower() == lastName):
-			playerID = playerData['personId']
-			break
+	# for playerData in playerDataJSON['league']['standard']:
+	# 	if(playerData['firstName'].lower() == firstName and playerData['lastName'].lower() == lastName):
+	# 		playerID = playerData['personId']
+	# 		break
 
-	if(playerID == -1):
+	# new implementation using nba_api
+	player_dict = players.get_players()
+	player = [player for player in player_dict if str(player['full_name']).lower() == mainPlayerName]
+	player_id = player[0]['id']
+
+	gamelog_player = playergamelog.PlayerGameLog(player_id=player_id, season='2021')
+	df_player_games = gamelog_player.get_data_frames()[0]
+	# with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+	# 	print(df_player_games)
+
+	if(player_id == -1):
 		print("No player found!")
 		return {}
-
-	with urllib.request.urlopen(playerStatsUrl.format(playerID)) as url:
-		playerStatsJSON = json.loads(url.read().decode())
-
-	if 'league' not in playerStatsJSON:
-		print("Stats not found!")
+	elif len(df_player_games) == 0:
+		print("No games played yet!")
 		return {}
 
-	playerStats = playerStatsJSON['league']['standard']['stats']['latest']
+	# with urllib.request.urlopen(playerStatsUrl.format(playerID)) as url:
+	# 	playerStatsJSON = json.loads(url.read().decode())
+
+	# if 'league' not in playerStatsJSON:
+	# 	print("Stats not found!")
+	# 	return {}
+
+	# playerStats = playerStatsJSON['league']['standard']['stats']['latest']
+
+	#calculate stats from last 5 games
+	df_last_5_games = df_player_games.head(5)
+	# print(df_last_5_games)
+
 	compiledStats = {
-		'ID': playerID,
-		'firstName': firstName,
-		'lastName': lastName,
-		'ppg': float(playerStats['ppg']),
-		'rpg': float(playerStats['rpg']),
-		'apg': float(playerStats['apg']),
-		'spg': float(playerStats['spg']),
-		'bpg': float(playerStats['bpg']),
-		'topg': float(playerStats['topg']),
-		'fgp': float(playerStats['fgp']),
-		'ftp': float(playerStats['ftp']),
-		'3pm': float(float(playerStats['tpm']) / float(playerStats['gamesPlayed'])) 
+		'playerName': mainPlayerName,
+		'ppg': df_last_5_games["PTS"].mean(),
+		'rpg': df_last_5_games["REB"].mean(),
+		'apg': df_last_5_games["AST"].mean(),
+		'spg': df_last_5_games["STL"].mean(),
+		'bpg': df_last_5_games["BLK"].mean(),
+		'topg': df_last_5_games["TOV"].mean(),
+		'fgp': float(df_last_5_games["FGM"].sum() / df_last_5_games["FGA"].sum()),
+		'ftp': float(df_last_5_games["FTM"].sum() / df_last_5_games["FTA"].sum()),
+		'3pm': df_last_5_games["FG3M"].mean() 
 	}
 
-	for i in compiledStats:
-		if type(compiledStats[i]) == float and compiledStats[i] <= 0.0:
-			compiledStats[i] += 0.1
+	# for i in compiledStats:
+	# 	if type(compiledStats[i]) == float and compiledStats[i] <= 0.0:
+	# 		compiledStats[i] += 0.1
 
 	return compiledStats
 
@@ -70,13 +89,23 @@ def comparePlayer(player1, player2):
 	percentages.append(round((player2['apg'] / (player2['apg'] + player1['apg']) * 100) - 50, 2))
 	percentages.append(round((player2['bpg'] / (player2['bpg'] + player1['bpg']) * 100) - 50, 2))
 	percentages.append(round((player2['spg'] / (player2['spg'] + player1['spg']) * 100) - 50, 2))
-	percentages.append(round((player2['fgp'] / (player2['fgp'] + player1['fgp']) * 100) - 50, 2))
-	percentages.append(round((player2['ftp'] / (player2['ftp'] + player1['ftp']) * 100) - 50, 2))
 	percentages.append(round((player1['topg'] / (player2['topg'] + player1['topg']) * 100) - 50, 2))
 	percentages.append(round((player2['3pm'] / (player2['3pm'] + player1['3pm']) * 100) - 50, 2))
 
+	if math.isnan(player1['fgp']) or math.isnan(player2['fgp']):
+		percentages.append(0)
+	else:
+		percentages.append(round((player2['fgp'] / (player2['fgp'] + player1['fgp']) * 100) - 50, 2))
+	
+	if math.isnan(player1['ftp']) or math.isnan(player2['ftp']):
+		percentages.append(0)
+	else:
+		percentages.append(round((player2['ftp'] / (player2['ftp'] + player1['ftp']) * 100) - 50, 2))
+
+
 	average = round(sum(percentages[:9]) / 9, 2)
 	print(percentages)
+	
 	betterCatCount = sum([1 for i in percentages if i > 0])
 
 	percentages.append(betterCatCount)
@@ -85,8 +114,9 @@ def comparePlayer(player1, player2):
 
 def main():
 	mainPlayerName = input("Enter player full name: ")
-	mainPlayerNameFmt = mainPlayerName.lower().split(" ")
-	mainPlayerStats = loadPlayerStats(mainPlayerNameFmt[0], ' '.join(mainPlayerNameFmt[1:]))
+	# mainPlayerNameFmt = mainPlayerName.lower().split(" ")
+	mainPlayerStats = loadPlayerStats(mainPlayerName.lower())
+	
 	if 'ppg' not in mainPlayerStats:
 		exit()
 
@@ -100,9 +130,8 @@ def main():
 	cpName = input("Enter player to compare full name: ")
 
 	while(isToCompare):
-		cpNameFmt = cpName.lower().split(" ")
+		cpStats = loadPlayerStats(cpName.lower())
 
-		cpStats = loadPlayerStats(cpNameFmt[0], ' '.join(cpNameFmt[1:]))
 		if 'ppg' in cpStats:
 			comparedPlayerName.append(cpName)
 			comparedPlayerStats.append(cpStats)
@@ -127,7 +156,7 @@ def main():
 				row = 0
 				column = 0
 
-				for i in ['Player Name', 'Point per Game', 'Rebound per Game', 'Assist per Game', 'Field Goal %', 'Free Throw %', 'Turnover per Game', 'Steal per Game', 'Block per Game', '3PT per Game', 'Better/Worse Percentage', 'Better categories count']:
+				for i in ['Player Name', 'Point per Game', 'Rebound per Game', 'Assist per Game', 'Turnover per Game', 'Steal per Game', 'Block per Game', '3PT per Game', 'Field Goal %', 'Free Throw %', 'Better/Worse Percentage', 'Better categories count']:
 					worksheet.write(row, column, i)
 					column += 1
 				
